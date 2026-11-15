@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Epic Mini App</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--bg:#f4f4f9;--card:#fff;--in:#ececf3;--tx:#14141a;--mut:#80808f;--ac:#7c5cff;--ok:#1fa35b;--bad:#e5484d;--gold:#e0a800;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b0b10;--card:#17171f;--in:#232330;--tx:#f2f2f7;--mut:#8a8a9a}}
+:root[data-theme="dark"]{--bg:#0b0b10;--card:#17171f;--in:#232330;--tx:#f2f2f7;--mut:#8a8a9a}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;max-width:480px;margin:auto;padding:0 12px 90px}
+#top{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;justify-content:space-between;align-items:center;padding:12px 0}
+#bal{font-size:24px;font-weight:800}
+button,input{font:inherit;border:0;border-radius:12px;padding:10px 12px;background:var(--in);color:var(--tx)}
+button{cursor:pointer;font-weight:600}button:active{transform:scale(.97)}button:disabled{opacity:.6}
+button.on{background:var(--ac);color:#fff}
+.go,.ok{width:100%;padding:14px;color:#fff;background:var(--ac)}.ok{background:var(--ok)}
+.card{background:var(--card);border-radius:18px;padding:14px;margin:10px 0}
+.row{display:flex;gap:8px;margin:8px 0;flex-wrap:wrap}.row>*{flex:1;min-width:0}
+.big{font-size:52px;font-weight:900;text-align:center;margin:6px 0}.up{color:var(--ok)}.dn{color:var(--bad)}
+.res{text-align:center;font-weight:700;min-height:24px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0}
+.grid>button{aspect-ratio:1;font-size:28px;padding:0}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.it{background:var(--in);border-radius:14px;padding:8px 4px;text-align:center;font-size:12px;height:100%}
+.it.nft{outline:2px solid var(--gold)}.it .e{font-size:30px}.it .v{color:var(--mut)}.it button{padding:4px;margin-top:4px;width:100%;font-size:11px}
+.sl>.it{outline:2px solid var(--ac)}.ch{color:var(--ok);font-weight:700}
+.mut{color:var(--mut);font-size:13px}.w{color:var(--ok)}.l{color:var(--bad)}.center{text-align:center}
+.hist{display:flex;gap:4px;overflow:auto;font-size:12px}.hist span{padding:2px 8px;border-radius:10px;background:var(--in)}
+.reel{font-size:70px;text-align:center}.prev{font-size:22px;margin:6px 0;letter-spacing:2px}
+.ach{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center;font-size:24px}.ach small{display:block;font-size:10px;color:var(--mut)}.lock{opacity:.25;filter:grayscale(1)}
+#tabs{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:flex;background:var(--card);padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--in)}
+#tabs button{flex:1;background:none;font-size:20px;padding:4px 0;line-height:1.1}#tabs small{display:block;font-size:10px;color:var(--mut)}#tabs .on{color:var(--ac);background:none}#tabs .on small{color:var(--ac)}
+#toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#000d;color:#fff;padding:10px 16px;border-radius:20px;opacity:0;transition:.25s;pointer-events:none;z-index:9;text-align:center}#toast.s{opacity:1}
+</style></head><body>
+<div id="top"><div><div class="mut" id="nm"></div><div id="bal">…</div></div><button class="on" onclick="go('prof')">＋ Пополнить</button></div>
+<div class="row" id="bets"></div>
+<main id="v"></main>
+<div id="tabs"></div><div id="toast"></div>
+<script>
+const TG=window.Telegram&&Telegram.WebApp,$=s=>document.querySelector(s);
+if(TG){TG.ready();TG.expand();document.documentElement.dataset.theme=TG.colorScheme}
+try{const a=localStorage.getItem("acc");if(a)document.documentElement.style.setProperty("--ac",a)}catch(e){}
+let CFG,S={bal:0,inv:[],ach:[],name:""},BET=10,tab="cases",tm=null,G=null,mc=3,sel=null,st=null,rt=0,lastOut=0;
+const TABS=[["cases","🎁","Кейсы"],["crash","🚀","Краш"],["mines","💣","Мины"],["roul","🎡","Рулетка"],["up","⬆️","Апгрейд"],["prof","👤","Профиль"]];
+const ACC=["#7c5cff","#0aa5d6","#e0a800","#e5484d"];
+function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("s");setTimeout(()=>e.classList.remove("s"),2200)}
+async function api(a,p={}){try{const r=await fetch("/api/"+a,{method:"POST",headers:{"X-Init":TG?TG.initData:"","Content-Type":"application/json"},body:JSON.stringify(p)});const d=await r.json();
+ if(d.me){S=d.me;$("#bal").textContent=S.bal+" ⭐";$("#nm").textContent=S.name}if(d.new)toast("🏅 "+d.new.map(c=>CFG.ach[c][1]).join(", "));if(d.e){toast(d.e);return null}return d}catch(e){toast("Нет связи");return null}}
+const v=h=>$("#v").innerHTML=h,res=h=>{const e=$("#res");if(e)e.innerHTML=h};
+const it=(id,x="")=>{const i=CFG.items[id];return `<div class="it ${i.t}"><div class="e">${i.e}</div><div>${i.n}</div><div class="v">${i.v}⭐</div>${x}</div>`};
+function tabs(){$("#tabs").innerHTML=TABS.map(t=>`<button class="${t[0]==tab?"on":""}" onclick="go('${t[0]}')">${t[1]}<small>${t[2]}</small></button>`).join("")}
+function bets(){const e=$("#bets");e.style.display=["crash","mines","roul"].includes(tab)?"flex":"none";e.innerHTML=[1,5,10,50,100,500].map(b=>`<button class="${b==BET?"on":""}" onclick="BET=${b};bets()">${b}⭐</button>`).join("")}
+function go(t){clearInterval(tm);tm=null;st=null;tab=t;tabs();bets();R[t]()}
+const R={
+cases(){v(`<div id="rs"></div>`+CFG.cases.map((c,i)=>`<div class="card"><b>${c.n}</b><div class="prev">${c.drops.map(d=>CFG.items[d[0]].e).join("")}</div><button class="go" onclick="openCase(${i})">Открыть · ${c.price}⭐</button></div>`).join(""))},
+crash(){v(`<div class="card"><div class="hist" id="ch"></div><div class="big" id="cm">…</div><div class="res" id="cs"></div><div class="row"><input id="au" type="number" step="0.1" min="1.1" placeholder="Авто-вывод x"><button class="go" id="cb" onclick="crBtn()"></button></div></div><div class="card"><b>Игроки раунда</b><div id="cp" class="mut"></div></div>`);let n=0;tm=setInterval(()=>{if(n++%7==0)poll();draw()},100)},
+async mines(){v(`<div class="card"><div class="row">${[1,3,5].map(n=>`<button class="${n==mc?"on":""}" onclick="mc=${n};R.mines()">💣 ${n}</button>`).join("")}</div><div class="res" id="res">Выбери мины и ставку</div><div class="grid" id="gr"></div><button class="go" id="mb" onclick="mnBtn()">Старт</button></div>`);
+ drawMines();const d=await api("state");if(d&&d.n&&tab=="mines"){G={open:new Set(d.open)};mc=d.n;setMb(d.m);res("Игра продолжается");drawMines()}},
+roul(){v(`<div class="card"><div class="big" id="m">🎡</div><div class="res" id="res">Ставь на цвет</div><div class="row"><button onclick="spin('r')">🔴 x2</button><button onclick="spin('b')">⚫ x2</button><button onclick="spin('g')">🟢 x14</button></div></div>`)},
+up(){const inv=S.inv.filter(x=>CFG.items[x[1]].t!="star"),cur=inv.find(x=>x[0]==sel);if(!cur)sel=null;
+ v(`<div class="card"><b>1. Твой предмет</b><div class="g3" style="margin-top:8px">${inv.map(x=>`<div class="${sel==x[0]?"sl":""}" onclick="sel=${x[0]};R.up()">${it(x[1])}</div>`).join("")||'<div class="mut">Нет предметов — открой кейс</div>'}</div></div><div id="tg"></div><div class="res" id="res"></div>`);
+ if(cur){const cv=CFG.items[cur[1]].v,t=Object.entries(CFG.items).filter(([k,i])=>i.t!="star"&&i.v>cv*1.2&&i.v<=cv*40).sort((a,b)=>a[1].v-b[1].v);
+  $("#tg").innerHTML=`<div class="card"><b>2. Выбери цель</b><div class="g3" style="margin-top:8px">${t.map(([k,i])=>`<div onclick="upg('${k}')">${it(k,`<div class="ch">${(CFG.up*cv/i.v*100).toFixed(1)}%</div>`)}</div>`).join("")||'<div class="mut">Нет целей</div>'}</div></div>`}},
+prof(){v(`<div class="card"><div class="mut">Баланс</div><div class="big" style="font-size:36px">${S.bal} ⭐</div><div class="row"><input id="dn" type="number" value="50" min="1"><button class="go" onclick="dep()">Пополнить</button></div><div class="row"><input id="wn" type="number" value="${CFG.minwd}" min="${CFG.minwd}"><button onclick="wd()">Вывести ⭐</button></div><div class="mut">Вывод подтверждает админ. Минимум ${CFG.minwd}⭐</div></div>
+<div class="card"><b>🎒 Инвентарь</b><div class="g3" style="margin-top:8px">${S.inv.map(x=>it(x[1],`<button onclick="sell(${x[0]})">Продать ${Math.floor(CFG.items[x[1]].v*CFG.sell)}⭐</button><button onclick="wdi(${x[0]})">Вывести</button>`)).join("")||'<div class="mut">Пусто</div>'}</div></div>
+<div class="card"><b>🏅 Достижения</b><div class="ach" style="margin-top:8px">${Object.entries(CFG.ach).map(([c,a])=>`<div class="${S.ach.includes(c)?"":"lock"}">${a[0]}<small>${a[1]}</small></div>`).join("")}</div></div>
+<div class="card"><b>🎨 Акцент</b><div class="row">${ACC.map(c=>`<button style="background:${c};height:36px" onclick="acc('${c}')"></button>`).join("")}</div><div class="mut">Игр: ${S.games} · оборот ${S.wag}⭐ · лучший x${(S.best||0).toFixed(2)}</div></div>`)}};
+async function openCase(i){const d=await api("case",{i});if(!d)return;const c=CFG.cases[i];let k=0;const t=setInterval(()=>{$("#rs").innerHTML=`<div class="card reel">${CFG.items[c.drops[k++%c.drops.length][0]].e}</div>`;if(k>12){clearInterval(t);const x=CFG.items[d.item];
+ $("#rs").innerHTML=`<div class="card center"><b>Выпало!</b><div style="max-width:150px;margin:8px auto">${it(d.item)}</div>${d.iid?`<button class="go" onclick="sell(${d.iid})">Продать за ${Math.floor(x.v*CFG.sell)}⭐</button>`:'<div class="w">⭐ зачислены на баланс</div>'}</div>`}},80)}
+async function sell(id){const d=await api("sell",{id});if(d){toast("+"+d.got+"⭐");R[tab]()}}
+async function wdi(id){const d=await api("wd_item",{id});if(d){toast(d.msg);R.prof()}}
+async function wd(){const d=await api("wd",{n:+$("#wn").value});if(d)toast(d.msg)}
+async function dep(){const d=await api("dep",{n:+$("#dn").value});if(d&&TG)TG.openInvoice(d.link,s=>{if(s=="paid"){toast("✅ Оплата прошла");setTimeout(()=>api("me").then(()=>R.prof()),1500)}})}
+function acc(c){document.documentElement.style.setProperty("--ac",c);try{localStorage.setItem("acc",c)}catch(e){}}
+async function upg(to){const d=await api("up",{id:sel,to});if(!d)return;res(d.ok?`<span class="w">✅ Успех! ${CFG.items[d.item].e} ${CFG.items[d.item].n}</span>`:'<span class="l">❌ Предмет сгорел</span>');sel=null;setTimeout(()=>tab=="up"&&R.up(),1800)}
+async function poll(){const d=await api("cr_state");if(d){st=d;rt=Date.now()}}
+function draw(){if(!st||!$("#cm"))return;const e=(Date.now()-rt)/1000,mi=st.mine,b=$("#cb");let m=1;
+ if(st.phase=="bet"){$("#cm").textContent=Math.max(0,st.left-e).toFixed(1)+"с";$("#cm").className="big";$("#cs").textContent="Приём ставок"}
+ else if(st.phase=="run"){m=Math.exp(CFG.rate*(st.age+e));$("#cm").textContent="x"+m.toFixed(2);$("#cm").className="big up";$("#cs").textContent="Летим!"}
+ else{$("#cm").textContent="💥 x"+st.cp.toFixed(2);$("#cm").className="big dn";$("#cs").textContent="Краш"}
+ if(st.phase=="bet"&&!mi){b.textContent=`Поставить ${BET}⭐`;b.className="go";b.disabled=false}
+ else if(st.phase=="run"&&mi&&!mi.out){b.textContent=`Забрать ${Math.floor(mi.amt*m)}⭐`;b.className="ok";b.disabled=false}
+ else{b.className="go";b.disabled=true;b.textContent=mi?(mi.out?`✅ x${mi.out.toFixed(2)} · +${Math.floor(mi.amt*mi.out)}⭐`:st.phase=="end"?"Проигрыш":"Ставка принята"):"Ждём раунд"}
+ if(mi&&mi.out&&lastOut!=st.id){lastOut=st.id;api("me")}
+ $("#ch").innerHTML=[...st.hist].reverse().map(x=>`<span class="${x>=2?"w":"l"}">x${x.toFixed(2)}</span>`).join("");
+ $("#cp").innerHTML=st.bets.map(x=>`${x[0]} · ${x[1]}⭐ ${x[2]?`<span class="w">x${x[2].toFixed(2)}</span>`:""}`).join("<br>")||"Пока никого"}
+async function crBtn(){if(!st)return;const d=st.phase=="bet"?await api("cr_bet",{bet:BET,auto:+$("#au").value||0}):await api("cr_out");if(d)poll()}
+function drawMines(rev,mines=[]){const t=["💎","💣","⬜"],o=G?G.open:new Set();$("#gr").innerHTML=[...Array(16)].map((_,i)=>`<button ${G&&!rev&&!o.has(i)?`onclick="mnOpen(${i})"`:"disabled"}>${o.has(i)?t[0]:rev&&mines.includes(i)?t[1]:t[2]}</button>`).join("")}
+function setMb(m){$("#mb").className="ok";$("#mb").textContent="💸 Забрать"+(m?" x"+m.toFixed(2):"")}
+async function mnBtn(){if(G){const d=await api("mn_cash");if(d)mnEnd(d);return}const d=await api("mn_start",{n:mc,bet:BET});if(!d)return;G={open:new Set()};setMb(0);res("Открывай клетки");drawMines()}
+async function mnOpen(i){const d=await api("mn_open",{i});if(!d)return;G.open=new Set(d.open);if(d.over)return mnEnd(d);res("x"+d.m.toFixed(2));setMb(d.m);drawMines()}
+function mnEnd(d){G.open=new Set(d.open);drawMines(1,d.mines);res(d.w?`<span class="w">Забрал +${d.w}⭐</span>`:'<span class="l">💥 Мина!</span>');G=null;$("#mb").className="go";$("#mb").textContent="Ещё раз"}
+async function spin(pick){if(tm)return;const d=await api("roul",{pick,bet:BET});if(!d)return;const E={g:"🟢",r:"🔴",b:"⚫"};let k=0;
+ tm=setInterval(()=>{$("#m").textContent=E["rbg"[k++%3]]+" "+Math.floor(Math.random()*15);if(k>12){clearInterval(tm);tm=null;$("#m").textContent=E[d.col]+" "+d.n;res(d.w?`<span class="w">+${d.w}⭐</span>`:'<span class="l">Мимо</span>')}},90)}
+(async()=>{CFG=await api("cfg");if(!CFG)return;await api("me");go("cases")})();
+</script></body></html>
