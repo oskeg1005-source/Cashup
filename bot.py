@@ -9,7 +9,7 @@ from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.types import InlineKeyboardButton as B, InlineKeyboardMarkup as M, WebAppInfo, MenuButtonWebApp, LabeledPrice
 
 TOKEN, DSN = os.environ["BOT_TOKEN"], os.environ["DATABASE_URL"]
-ADMIN, URL, START = int(os.getenv("ADMIN_ID", "0")), (os.getenv("WEBAPP_URL") or os.getenv("RENDER_EXTERNAL_URL", "")).rstrip("/"), int(os.getenv("START_BAL", "0"))
+ADMIN, URL, START = int(os.getenv("ADMIN_ID", "0")), (os.getenv("RENDER_EXTERNAL_URL") or os.getenv("WEBAPP_URL", "")).rstrip("/"), int(os.getenv("START_BAL", "0"))
 RTP, CASE_RTP, UP_RTP, SELL, MINWD, MAXBET, RATE = .95, .9, .9, .85, 50, 1000, .12
 bot = Bot(TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
@@ -425,6 +425,9 @@ async def main():
         CREATE TABLE IF NOT EXISTS wd(id BIGSERIAL PRIMARY KEY,uid BIGINT,kind TEXT,amt INT,item TEXT,st TEXT DEFAULT 'new');""")
     app = web.Application()
     page = Path(__file__).parent / "static" / "index.html"
+    if not page.exists():
+        page = Path(__file__).parent / "index.html"
+    print(f"WEBAPP_URL={URL!r} index={page} exists={page.exists()}", flush=True)
     app.router.add_get("/", lambda r: web.FileResponse(page, headers={"Cache-Control": "no-cache"}))
     app.router.add_get("/health", lambda r: web.Response(text="ok"))
     app.router.add_post("/api/{act}", api)
