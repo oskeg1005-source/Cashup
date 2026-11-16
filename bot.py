@@ -17,23 +17,13 @@ pool: asyncpg.Pool
 games, locks = {}, {}
 
 # ---------- каталог ----------
+# цены (⭐) NFT-подарков; картинки лежат в static/g/<номер>.webp (порядок = порядок в списке)
+PRICES = [506, 506, 976, 450, 300, 506, 903, 506, 498, 490, 490, 499, 489, 506, 506, 503, 400, 390, 480, 506, 400, 506, 450, 528, 507, 507, 507, 1363, 506, 507, 521, 507, 643, 507, 507, 507, 1194, 1375, 687, 542, 507, 667, 687, 717, 507, 489, 507, 507, 450, 507, 1003, 499, 507, 470, 739, 507, 794, 507, 615, 556, 863, 724, 845, 1930, 1093, 851, 2895, 1338, 2387, 3045, 1409, 1447, 1113, 3185, 1085, 1057, 1043, 3185, 832, 2403, 4849, 2895, 5783, 3329, 2436, 2331, 3987, 3843, 3617, 5427, 6047, 7230, 9984, 10704, 23799, 43415, 5786, 10639, 11355, 7230, 3225, 5349, 12448, 9409, 15850, 21712, 36179, 600624, 119415, 120646, 112106]
 ITEMS = {}
-# обычные подарки Telegram (цены в звёздах — правь под себя)
-for k, e, n, v in [("bear", "🧸", "Мишка", 15), ("heart", "💝", "Сердце", 15), ("rose", "🌹", "Роза", 25), ("gift", "🎁", "Подарок", 25),
-                   ("cake", "🎂", "Торт", 50), ("bouquet", "💐", "Букет", 50), ("rocket", "🚀", "Ракета", 50), ("champ", "🍾", "Шампанское", 50),
-                   ("tree", "🎄", "Ёлка", 50), ("fire", "🎆", "Фейерверк", 50), ("pumpkin", "🎃", "Тыква", 50),
-                   ("trophy", "🏆", "Кубок", 100), ("ring", "💍", "Кольцо", 100), ("diamond", "💎", "Алмаз", 100)]:
-    ITEMS[k] = {"e": e, "n": n, "v": v, "t": "gift"}
-# NFT-подарки
-for k, e, n, v in [("nlol", "🍭", "Lol Pop", 120), ("ncane", "🍬", "Candy Cane", 150), ("ncal", "📅", "Desk Calendar", 200), ("ncookie", "🍪", "Cookie Heart", 250),
-                   ("nbunny", "🐰", "Jelly Bunny", 300), ("nwine", "🍷", "Spiced Wine", 350), ("nsanta", "🎅", "Santa Hat", 400), ("nbear", "🧸", "Toy Bear", 600),
-                   ("ncat", "🐱", "Scared Cat", 900), ("neye", "🧿", "Evil Eye", 1000), ("nlocket", "💖", "Heart Locket", 1500), ("nlamp", "🪔", "Genie Lamp", 2000),
-                   ("nwatch", "⌚", "Swiss Watch", 2500), ("ntop", "🎩", "Top Hat", 3000), ("nperf", "🧴", "Perfume Bottle", 3500), ("ncap", "🧢", "Durov's Cap", 4000),
-                   ("nskull", "💀", "Electric Skull", 5000), ("npeach", "🍑", "Precious Peach", 6000), ("nsnoop", "🐶", "Snoop Dogg", 8000),
-                   ("nrose", "🥀", "Eternal Rose", 9000), ("nsig", "💠", "Signet Ring", 10000), ("ngem", "🔷", "Ion Gem", 12000), ("npepe", "🐸", "Plush Pepe", 15000)]:
-    ITEMS[k] = {"e": e, "n": n, "v": v, "t": "nft"}
-for s in (10, 25, 50, 100, 250, 500, 1000):
-    ITEMS[f"s{s}"] = {"e": "⭐", "n": f"{s} звёзд", "v": s, "t": "star"}
+for i, v in enumerate(PRICES):
+    ITEMS[f"g{i}"] = {"e": "🎁", "n": f"Подарок №{i + 1}", "v": v, "t": "nft", "img": f"/g/{i}.webp"}
+for s_ in (10, 25, 50, 100, 250, 500, 1000):
+    ITEMS[f"s{s_}"] = {"e": "⭐", "n": f"{s_} звёзд", "v": s_, "t": "star", "img": None}
 
 
 def mkcase(n, col, d):  # цена считается из матожидания → RTP ≈ 90%
@@ -42,16 +32,19 @@ def mkcase(n, col, d):  # цена считается из матожидани�
     return {"n": n, "c": col, "price": math.ceil(ev / CASE_RTP), "drops": [[i, w / tot] for i, w in sorted(d, key=lambda x: -ITEMS[x[0]]["v"])]}
 
 
+def rng(lo, hi, p=0.0, extra=()):  # предметы с ценой lo..hi, шанс ~ 1/цена^p
+    return [(k, 1 / it["v"] ** p) for k, it in ITEMS.items() if it["t"] == "nft" and lo <= it["v"] < hi] + list(extra)
+
+
 CASES = sorted([
-    mkcase("🧸 Новичок", "#4ade80", [("bear", 30), ("heart", 25), ("rose", 15), ("gift", 15), ("s10", 10), ("cake", 5)]),
-    mkcase("🎁 Подарки", "#38bdf8", [("bear", 30), ("heart", 22), ("rose", 14), ("gift", 12), ("cake", 8), ("rocket", 7), ("trophy", 4), ("ring", 3)]),
-    mkcase("💐 Романтика", "#fb7185", [("heart", 25), ("rose", 22), ("bouquet", 18), ("ring", 12), ("diamond", 10), ("nlol", 6), ("nlocket", 4), ("ncookie", 3)]),
-    mkcase("🍾 Праздник", "#f59e0b", [("cake", 22), ("champ", 20), ("tree", 12), ("fire", 12), ("pumpkin", 10), ("ncane", 8), ("nsanta", 6), ("nwine", 6), ("nbunny", 4)]),
-    mkcase("🏆 Золотой", "#facc15", [("trophy", 25), ("ring", 20), ("diamond", 20), ("s100", 15), ("s250", 8), ("nbunny", 7), ("nbear", 5)]),
-    mkcase("⭐ Звёздный", "#fde047", [("s10", 25), ("s25", 25), ("s50", 20), ("s100", 15), ("s250", 9), ("s500", 5), ("s1000", 1)]),
-    mkcase("💎 Премиум", "#a78bfa", [("s25", 30), ("cake", 20), ("trophy", 18), ("ring", 14), ("s100", 10), ("nbunny", 6), ("nbear", 2)]),
-    mkcase("🔮 NFT", "#c084fc", [("s50", 40), ("ring", 20), ("nbunny", 18), ("nbear", 12), ("nlocket", 7), ("ncap", 2.5), ("npepe", .5)]),
-    mkcase("🐸 Легенда", "#f43f5e", [("nlocket", 30), ("ncap", 25), ("nlamp", 15), ("ntop", 12), ("nskull", 8), ("nsnoop", 6), ("npepe", 3), ("ngem", 1)]),
+    mkcase("Старт", "#4ade80", [("s10", 40), ("s25", 30), ("s50", 18), ("s100", 9), ("g4", 3)]),
+    mkcase("Звёздный", "#fde047", [("s50", 35), ("s100", 30), ("s250", 20), ("s500", 11), ("s1000", 4)]),
+    mkcase("Обычный", "#38bdf8", rng(0, 520, 0, [("s100", 8), ("s250", 4)])),
+    mkcase("Тёплый", "#fb923c", rng(300, 1200, .3)),
+    mkcase("Редкий", "#60a5fa", rng(800, 3500, .6)),
+    mkcase("Эпик", "#a78bfa", rng(2000, 12000, .8)),
+    mkcase("Легенда", "#f59e0b", rng(5000, 50000, 1)),
+    mkcase("Мифик", "#f43f5e", rng(10000, 10 ** 7, 1.2)),
 ], key=lambda c: c["price"])
 
 ACH = {
@@ -429,6 +422,7 @@ async def main():
         page = Path(__file__).parent / "index.html"
     print(f"WEBAPP_URL={URL!r} index={page} exists={page.exists()}", flush=True)
     app.router.add_get("/", lambda r: web.FileResponse(page, headers={"Cache-Control": "no-cache"}))
+    app.router.add_static("/g", Path(__file__).parent / "static" / "g")
     app.router.add_get("/health", lambda r: web.Response(text="ok"))
     app.router.add_post("/api/{act}", api)
     runner = web.AppRunner(app)
