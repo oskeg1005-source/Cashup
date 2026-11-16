@@ -1,4 +1,4 @@
-import asyncio, os, random, time, math, json, hmac, hashlib, html
+import aiohttp, asyncio, os, random, time, math, json, hmac, hashlib, html
 from pathlib import Path
 from urllib.parse import parse_qsl
 import asyncpg
@@ -9,7 +9,7 @@ from aiogram.filters import CommandStart, Command, CommandObject
 from aiogram.types import InlineKeyboardButton as B, InlineKeyboardMarkup as M, WebAppInfo, MenuButtonWebApp, LabeledPrice
 
 TOKEN, DSN = os.environ["BOT_TOKEN"], os.environ["DATABASE_URL"]
-ADMIN, URL, START = int(os.getenv("ADMIN_ID", "0")), os.getenv("WEBAPP_URL", ""), int(os.getenv("START_BAL", "0"))
+ADMIN, URL, START = int(os.getenv("ADMIN_ID", "0")), (os.getenv("WEBAPP_URL") or os.getenv("RENDER_EXTERNAL_URL", "")).rstrip("/"), int(os.getenv("START_BAL", "0"))
 RTP, CASE_RTP, UP_RTP, SELL, MINWD, MAXBET, RATE = .95, .9, .9, .85, 50, 1000, .12
 bot = Bot(TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher()
@@ -18,27 +18,42 @@ games, locks = {}, {}
 
 # ---------- каталог ----------
 ITEMS = {}
+# обычные подарки Telegram (цены в звёздах — правь под себя)
 for k, e, n, v in [("bear", "🧸", "Мишка", 15), ("heart", "💝", "Сердце", 15), ("rose", "🌹", "Роза", 25), ("gift", "🎁", "Подарок", 25),
-                   ("cake", "🎂", "Торт", 50), ("rocket", "🚀", "Ракета", 50), ("trophy", "🏆", "Кубок", 100), ("ring", "💍", "Кольцо", 100)]:
+                   ("cake", "🎂", "Торт", 50), ("bouquet", "💐", "Букет", 50), ("rocket", "🚀", "Ракета", 50), ("champ", "🍾", "Шампанское", 50),
+                   ("tree", "🎄", "Ёлка", 50), ("fire", "🎆", "Фейерверк", 50), ("pumpkin", "🎃", "Тыква", 50),
+                   ("trophy", "🏆", "Кубок", 100), ("ring", "💍", "Кольцо", 100), ("diamond", "💎", "Алмаз", 100)]:
     ITEMS[k] = {"e": e, "n": n, "v": v, "t": "gift"}
-for k, e, n, v in [("nbunny", "🐰", "Jelly Bunny", 300), ("nbear", "🧸", "Toy Bear", 600), ("nlocket", "💖", "Heart Locket", 1500),
-                   ("ncap", "🧢", "Durov's Cap", 4000), ("npepe", "🐸", "Plush Pepe", 15000)]:
+# NFT-подарки
+for k, e, n, v in [("nlol", "🍭", "Lol Pop", 120), ("ncane", "🍬", "Candy Cane", 150), ("ncal", "📅", "Desk Calendar", 200), ("ncookie", "🍪", "Cookie Heart", 250),
+                   ("nbunny", "🐰", "Jelly Bunny", 300), ("nwine", "🍷", "Spiced Wine", 350), ("nsanta", "🎅", "Santa Hat", 400), ("nbear", "🧸", "Toy Bear", 600),
+                   ("ncat", "🐱", "Scared Cat", 900), ("neye", "🧿", "Evil Eye", 1000), ("nlocket", "💖", "Heart Locket", 1500), ("nlamp", "🪔", "Genie Lamp", 2000),
+                   ("nwatch", "⌚", "Swiss Watch", 2500), ("ntop", "🎩", "Top Hat", 3000), ("nperf", "🧴", "Perfume Bottle", 3500), ("ncap", "🧢", "Durov's Cap", 4000),
+                   ("nskull", "💀", "Electric Skull", 5000), ("npeach", "🍑", "Precious Peach", 6000), ("nsnoop", "🐶", "Snoop Dogg", 8000),
+                   ("nrose", "🥀", "Eternal Rose", 9000), ("nsig", "💠", "Signet Ring", 10000), ("ngem", "🔷", "Ion Gem", 12000), ("npepe", "🐸", "Plush Pepe", 15000)]:
     ITEMS[k] = {"e": e, "n": n, "v": v, "t": "nft"}
-for s in (10, 25, 50, 100, 250):
+for s in (10, 25, 50, 100, 250, 500, 1000):
     ITEMS[f"s{s}"] = {"e": "⭐", "n": f"{s} звёзд", "v": s, "t": "star"}
 
 
-def mkcase(n, d):  # цена считается из матожидания → RTP ≈ 90%
+def mkcase(n, col, d):  # цена считается из матожидания → RTP ≈ 90%
     tot = sum(w for _, w in d)
     ev = sum(ITEMS[i]["v"] * w for i, w in d) / tot
-    return {"n": n, "price": math.ceil(ev / CASE_RTP), "drops": [[i, w / tot] for i, w in d]}
+    return {"n": n, "c": col, "price": math.ceil(ev / CASE_RTP), "drops": [[i, w / tot] for i, w in sorted(d, key=lambda x: -ITEMS[x[0]]["v"])]}
 
 
-CASES = [
-    mkcase("🎁 Подарки", [("bear", 30), ("heart", 22), ("rose", 14), ("gift", 12), ("cake", 8), ("rocket", 7), ("trophy", 4), ("ring", 3)]),
-    mkcase("💎 Премиум", [("s25", 30), ("cake", 20), ("trophy", 18), ("ring", 14), ("s100", 10), ("nbunny", 6), ("nbear", 2)]),
-    mkcase("🔮 NFT", [("s50", 40), ("ring", 20), ("nbunny", 18), ("nbear", 12), ("nlocket", 7), ("ncap", 2.5), ("npepe", .5)]),
-]
+CASES = sorted([
+    mkcase("🧸 Новичок", "#4ade80", [("bear", 30), ("heart", 25), ("rose", 15), ("gift", 15), ("s10", 10), ("cake", 5)]),
+    mkcase("🎁 Подарки", "#38bdf8", [("bear", 30), ("heart", 22), ("rose", 14), ("gift", 12), ("cake", 8), ("rocket", 7), ("trophy", 4), ("ring", 3)]),
+    mkcase("💐 Романтика", "#fb7185", [("heart", 25), ("rose", 22), ("bouquet", 18), ("ring", 12), ("diamond", 10), ("nlol", 6), ("nlocket", 4), ("ncookie", 3)]),
+    mkcase("🍾 Праздник", "#f59e0b", [("cake", 22), ("champ", 20), ("tree", 12), ("fire", 12), ("pumpkin", 10), ("ncane", 8), ("nsanta", 6), ("nwine", 6), ("nbunny", 4)]),
+    mkcase("🏆 Золотой", "#facc15", [("trophy", 25), ("ring", 20), ("diamond", 20), ("s100", 15), ("s250", 8), ("nbunny", 7), ("nbear", 5)]),
+    mkcase("⭐ Звёздный", "#fde047", [("s10", 25), ("s25", 25), ("s50", 20), ("s100", 15), ("s250", 9), ("s500", 5), ("s1000", 1)]),
+    mkcase("💎 Премиум", "#a78bfa", [("s25", 30), ("cake", 20), ("trophy", 18), ("ring", 14), ("s100", 10), ("nbunny", 6), ("nbear", 2)]),
+    mkcase("🔮 NFT", "#c084fc", [("s50", 40), ("ring", 20), ("nbunny", 18), ("nbear", 12), ("nlocket", 7), ("ncap", 2.5), ("npepe", .5)]),
+    mkcase("🐸 Легенда", "#f43f5e", [("nlocket", 30), ("ncap", 25), ("nlamp", 15), ("ntop", 12), ("nskull", 8), ("nsnoop", 6), ("npepe", 3), ("ngem", 1)]),
+], key=lambda c: c["price"])
+
 ACH = {
     "first": ("🎮", "Первая игра", lambda r: r["games"] >= 1), "g50": ("🕹", "50 игр", lambda r: r["games"] >= 50),
     "dep": ("💳", "Первое пополнение", lambda r: r["deps"] >= 1), "case10": ("📦", "10 кейсов", lambda r: r["cases"] >= 10),
@@ -166,16 +181,22 @@ async def h_me(uid, p):
 
 
 async def h_case(uid, p):
-    c = CASES[int(p["i"])]
-    await charge(uid, c["price"])
-    item = random.choices([i for i, _ in c["drops"]], [w for _, w in c["drops"]])[0]
-    it, iid = ITEMS[item], None
-    if it["t"] == "star":
-        await add(uid, it["v"])
-    else:
-        iid = await pool.fetchval("INSERT INTO inv(uid,item) VALUES($1,$2) RETURNING id", uid, item)
-    await pool.execute("UPDATE users SET cases=cases+1,games=games+1,nfts=nfts+$1 WHERE id=$2", int(it["t"] == "nft"), uid)
-    return {"item": item, "iid": iid}
+    c, n = CASES[int(p["i"])], int(p.get("n", 1))
+    if n not in (1, 3, 5):
+        raise Err("Неверное количество")
+    await charge(uid, c["price"] * n)
+    out, nfts = [], 0
+    for _ in range(n):
+        item = random.choices([i for i, _ in c["drops"]], [w for _, w in c["drops"]])[0]
+        it, iid = ITEMS[item], None
+        if it["t"] == "star":
+            await add(uid, it["v"])
+        else:
+            iid = await pool.fetchval("INSERT INTO inv(uid,item) VALUES($1,$2) RETURNING id", uid, item)
+        nfts += it["t"] == "nft"
+        out.append({"item": item, "iid": iid})
+    await pool.execute("UPDATE users SET cases=cases+$3,games=games+$3,nfts=nfts+$1 WHERE id=$2", nfts, uid, n)
+    return {"items": out}
 
 
 def mm(n, k):
@@ -378,6 +399,19 @@ async def give(m, command: CommandObject):
             await m.answer("/give id сумма")
 
 
+async def keepalive():  # не даём бесплатному Render-сервису засыпать
+    base = os.getenv("RENDER_EXTERNAL_URL")
+    if not base:
+        return
+    async with aiohttp.ClientSession() as ses:
+        while True:
+            await asyncio.sleep(540)
+            try:
+                await ses.get(base + "/health")
+            except Exception as e:
+                print("keepalive", e)
+
+
 async def main():
     global pool
     pool = await asyncpg.create_pool(DSN, min_size=1, max_size=5)
@@ -391,7 +425,8 @@ async def main():
         CREATE TABLE IF NOT EXISTS wd(id BIGSERIAL PRIMARY KEY,uid BIGINT,kind TEXT,amt INT,item TEXT,st TEXT DEFAULT 'new');""")
     app = web.Application()
     page = Path(__file__).parent / "static" / "index.html"
-    app.router.add_get("/", lambda r: web.FileResponse(page))
+    app.router.add_get("/", lambda r: web.FileResponse(page, headers={"Cache-Control": "no-cache"}))
+    app.router.add_get("/health", lambda r: web.Response(text="ok"))
     app.router.add_post("/api/{act}", api)
     runner = web.AppRunner(app)
     await runner.setup()
@@ -399,6 +434,7 @@ async def main():
     if URL:
         await bot.set_chat_menu_button(menu_button=MenuButtonWebApp(text="🎰 Играть", web_app=WebAppInfo(url=URL)))
     asyncio.create_task(crash_loop())
+    asyncio.create_task(keepalive())
     await dp.start_polling(bot)
 
 

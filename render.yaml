@@ -1,16 +1,23 @@
 services:
   - type: web
-    name: epic-miniapp
+    name: cashup-miniapp
     runtime: python
     plan: free
+    healthCheckPath: /health
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
       - key: BOT_TOKEN
         sync: false
       - key: ADMIN_ID
         sync: false
-      - key: WEBAPP_URL
-        sync: false
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: cashup-db
+          property: connectionString
+databases:
+  - name: cashup-db
+    plan: free
+    ipAllowList: []
